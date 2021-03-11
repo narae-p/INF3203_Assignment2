@@ -129,7 +129,7 @@ class WormProcess(object):
         return poll
 
 class WormGateCore:
-    def __init__(self, port, other_gates=[]):
+    def __init__(self, port=None, other_gates=[]):
         global servername
         self.processes = []
         self.lock = threading.Lock()
