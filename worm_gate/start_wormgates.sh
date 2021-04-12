@@ -15,10 +15,15 @@ echo "run $1 wormgates"
 shuf -i 49152-65535 -n $1 > ports
 paste -d ':' nodes ports > wormgates
 
-
 WORMGATE="$(readlink -f wormgate.py)"
 WORMGATES_LIST="$(readlink -f wormgates)"
+OTHER_GATES=""
 
+for n in $(< wormgates)
+do
+    OTHER_GATES+="$n "
+done
+echo -n "OTHER_GATES:$OTHER_GATES "
 
 while IFS='' read -r LINE || [[ -n "$LINE" ]]
 do
@@ -26,13 +31,12 @@ do
     then
         HOST="$(echo "$LINE" | cut -d':' -f1)"
         PORT="$(echo "$LINE" | cut -d':' -f2)"
-
         echo -n "$HOST:$PORT -- "
         if [[ "$HOST" == "localhost" ]]
         then
             (set -x; "$WORMGATE" -p "$PORT" $* &)
         else
-            (set -x; ssh -f "$HOST" "$WORMGATE" -p "$PORT" $*)
+            (set -x; ssh -f "$HOST" "$WORMGATE" -p "$PORT" "$OTHER_GATES")
         fi
 
     else
