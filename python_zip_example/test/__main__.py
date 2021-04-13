@@ -108,6 +108,14 @@ def spread(host, target_size, other_gates):
     if numsegments < this_gate_segement_size:
         spread_segment(host, target_size, other_gates)
 
+    for g in range(len(other_gates)):
+        other_segements = check_num_of_segments(other_gates[g], False)
+        other_numsegments = other_segements[0]
+        other_gate_segement_size = other_segements[1]
+        other_other_gates = other_segements[2]
+        if other_numsegments < other_gate_segement_size:
+            spread_segment(other_gates[g], target_size, other_other_gates)
+
 if __name__ == '__main__':
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -126,11 +134,3 @@ if __name__ == '__main__':
         timer = RepeatedTimer(10, spread, host, target_size, other_gates)
     else:
         print("Enough number of worms in this portal, %s please die", host)
-
-    for g in range(len(other_gates)):
-        other_segements = check_num_of_segments(host, False)
-        other_numsegments = other_segements[0]
-        other_gate_segement_size = other_segements[1]
-        other_other_gates = other_segements[2]
-        if other_numsegments < other_gate_segement_size:
-            spread_segment(other_gates[g], target_size, other_other_gates)
