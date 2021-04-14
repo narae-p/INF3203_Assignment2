@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 from urllib.error import URLError
 
 worm_host = None
+worm_neighbors = []
 
 class RepeatedTimer:
 
@@ -130,7 +131,8 @@ class RepeatedTimer:
         self.event.set()
         self.thread.join()
 
-def spread_worm_segment(target_host, target_size, target_port, source_worm):
+def spread_worm_segment(target_gate_host, target_size, target_worm_port, source_worm=""):
+    global worm_neighbors
     path = os.path.dirname(os.path.realpath(__file__))
     file = open(path, "rb")
     byte = file.read(1)
@@ -140,15 +142,18 @@ def spread_worm_segment(target_host, target_size, target_port, source_worm):
         data += byte
     file.close()
 
-    port = target_host.split(":")[1]
-    params = 'args=-gp&args={}&args=-ts&args={}&args=-p&args={}&args=-sw&args={}'.format(port, target_size, target_port, source_worm)
-    url = 'http://{}/worm_entrance?{}'.format(target_host, params)
+    hostname = target_gate_host.split(":")[0]
+    port = target_gate_host.split(":")[1]
+    params = 'args=-gp&args={}&args=-ts&args={}&args=-p&args={}&args=-sw&args={}'.format(port, target_size, target_worm_port, source_worm)
+    url = 'http://{}/worm_entrance?{}'.format(target_gate_host, params)
 
     req = Request(url, data)
     response = urlopen(req)
+    worm_neighbors.append('{}:{}'.format(hostname, target_worm_port))
 
 def start_spread(args):
-
+    global worm_host
+    
     hostname = re.sub('\.local$', '', socket.gethostname())
     port = args.port
     gate_port = args.gate_port
@@ -166,37 +171,30 @@ def start_spread(args):
     print("gate_host:", gate_host)
     print("worm_host:", worm_host)
 
-    neighbors = get_neighbors(gate_host)
-    print("neighbors:", neighbors)
+    gate_neighbors = get_neighbors(gate_host)
+    print("gate_neighbors:", gate_neighbors)
     target_neighbor = worm_host
-    if len(neighbors) > 0:
-        target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), neighbors))
-        target_neighbor = neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
-    print("target_neighbor:", target_neighbor)
-    target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
+    target_worm_port = port
+    if len(gate_neighbors) > 0:
+        target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
+        target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
+        print("target_neighbor:", target_neighbor)
+        target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
     print("target_worm_port:", target_worm_port)
     if target_size <= 0:
         print("Target size is 0, no worm is spawned ")
-    elif len(neighbors) == 0:
+    elif len(gate_neighbors) == 0:
         # spread(gate_host, target_size, other_gates)
-        print("len(neighbors) == 0 ", len(neighbors))
+        print("len(gate_neighbors) == 0 ", len(gate_neighbors))
+        spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
     else:
         if source_worm:
-            worm_neighbors = get_worm_neighbors(source_worm)
-            if len(worm_neighbors) < (target_size - 1):
+            worm_neighbors.append(source_worm)
+            source_worm_neighbors = get_worm_neighbors(source_worm)
+            if (len(worm_neighbors) + len(source_worm_neighbors)) < target_size:
                 spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
         else:
             spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
-    # segements = check_num_of_segments(host, target_size)
-    # numsegments = segements[0]
-    # gate_segement_size = segements[1]
-    # other_gates = segements[2]
-    # if target_size == 0:
-    #     print("Target size is 0, no worm is spawned ")
-    # elif numsegments <= gate_segement_size:
-    #     timer = RepeatedTimer(3, spread, host, target_size, other_gates)
-    # else:
-    #     print("Enough number of worms in this portal (%s), no worm is spawned ", host)
 
 # HTTP Request Handler
 #=================================================================
@@ -261,8 +259,8 @@ class HttpRequestHandler(http.server.BaseHTTPRequestHandler):
             # wormgatecore.remove_finished()
             jsonresp = {
                     "msg": "Worm running",
-                    "servername": servername,
-                    "other_worms": wormgatecore.other_gates,
+                    "servername": worm_host,
+                    "other_worms": worm_neighbors,
             }
             self.send_whole_response(200, jsonresp)
             return
