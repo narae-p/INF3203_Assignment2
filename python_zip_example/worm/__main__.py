@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 from random import choice
 from threading import Event, Thread
 from urllib.request import urlopen, urlretrieve, Request
@@ -65,11 +66,13 @@ def build_arg_parser():
     port_help = "Port number of the worm."
     target_size_help = "Target size of the worms."
     source_worm_help = "Source worm host"
+    origin_worm_help = "Origin worm host"
 
     parser.add_argument("-gp", "--gate_port", type=int, help=gate_port_help)
     parser.add_argument("-ts", "--target_size", type=int, help=target_size_help)
     parser.add_argument("-p", "--port", type=int, help=port_help)
-    parser.add_argument("-sw", "--source_worm", default="", type=str, help=port_help)
+    parser.add_argument("-sw", "--source_worm", default="", type=str, help=source_worm_help)
+    parser.add_argument("-ow", "--origin_worm", default="", type=str, help=origin_worm_help)
 
     parser.add_argument("--die-after-seconds", type=float,
         default=DIE_AFTER_SECONDS_DEFAULT,
@@ -105,6 +108,12 @@ def get_worm_neighbors(host):
     other_worms = json_obj['other_worms']
     return other_worms
 
+def post_finish_spreading(target_host, source_host):
+    url = 'http://{}/done_spreading?last_worm={}'.format(target_host, source_host)
+    req = Request(url, method="POST")
+    response = urlopen(req)
+    return response
+
 class RepeatedTimer:
 
     """Repeat `function` every `interval` seconds."""
@@ -131,7 +140,7 @@ class RepeatedTimer:
         self.event.set()
         self.thread.join()
 
-def spread_worm_segment(target_gate_host, target_size, target_worm_port, source_worm=""):
+def spread_worm_segment(target_gate_host, target_size, target_worm_port, source_worm="", origin_worm=""):
     global worm_neighbors
     path = os.path.dirname(os.path.realpath(__file__))
     file = open(path, "rb")
@@ -144,12 +153,13 @@ def spread_worm_segment(target_gate_host, target_size, target_worm_port, source_
 
     hostname = target_gate_host.split(":")[0]
     port = target_gate_host.split(":")[1]
-    params = 'args=-gp&args={}&args=-ts&args={}&args=-p&args={}&args=-sw&args={}'.format(port, target_size, target_worm_port, source_worm)
+    params = 'args=-gp&args={}&args=-ts&args={}&args=-p&args={}&args=-sw&args={}&args=-ow&args={}'.format(port, target_size, target_worm_port, source_worm, origin_worm)
     url = 'http://{}/worm_entrance?{}'.format(target_gate_host, params)
 
     req = Request(url, data)
     response = urlopen(req)
     worm_neighbors.append('{}:{}'.format(hostname, target_worm_port))
+
 
 def start_spread(args):
     global worm_host
@@ -158,43 +168,30 @@ def start_spread(args):
     port = args.port
     gate_port = args.gate_port
     source_worm = args.source_worm
-    
-    print("gate_port:", gate_port)
-    print("port:", port)
-    print("source_worm:", source_worm)
+    origin_worm = args.origin_worm
 
     gate_host = hostname + ":" + str(gate_port)
     worm_host = hostname + ":" + str(port)
     target_size = args.target_size
 
-    print("target_size:", target_size)
-    print("gate_host:", gate_host)
-    print("worm_host:", worm_host)
-
     gate_neighbors = get_neighbors(gate_host)
-    print("gate_neighbors:", gate_neighbors)
     target_neighbor = worm_host
     target_worm_port = port
     if len(gate_neighbors) > 0:
         target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
         target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
-        print("target_neighbor:", target_neighbor)
         target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
-    print("target_worm_port:", target_worm_port)
-    if target_size <= 0:
-        print("Target size is 0, no worm is spawned ")
-    elif len(gate_neighbors) == 0:
-        # spread(gate_host, target_size, other_gates)
-        print("len(gate_neighbors) == 0 ", len(gate_neighbors))
-        spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
-    else:
-        if source_worm:
-            worm_neighbors.append(source_worm)
-            source_worm_neighbors = get_worm_neighbors(source_worm)
-            if (len(worm_neighbors) + len(source_worm_neighbors)) < target_size:
-                spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
+
+    if source_worm:
+        worm_neighbors.append(source_worm)
+        previous_worm_neighbors = get_worm_neighbors(source_worm)
+        if (len(worm_neighbors) + len(previous_worm_neighbors)) < target_size:
+            spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host, origin_worm)
         else:
-            spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host)
+            post_finish_spreading(origin_worm, worm_host)
+            worm_neighbors.append(origin_worm)
+    else:
+        spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host, worm_host)
 
 # HTTP Request Handler
 #=================================================================
@@ -221,38 +218,30 @@ class HttpRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
-    # def do_POST(self):
-    #     parsed_path = urllib.parse.urlparse(self.path)
-    #     path_path = parsed_path.path
-    #     qs = urllib.parse.parse_qs(parsed_path.query)
-
-    #     content_length = int(self.headers.get('content-length', 0))
-    #     content = self.rfile.read(content_length)
+    def do_POST(self):
+        parsed_path = urllib.parse.urlparse(self.path)
+        path_path = parsed_path.path
         
-    #     if path_path == "/worm_entrance":
-    #         exec_bin = content
-    #         exec_args = qs["args"] if "args" in qs else []
+        if path_path == "/done_spreading":
 
-    #         wormgatecore.start_process(content, exec_args)
+            last_worm = re.sub(r'^/done_spreading\?last_worm=([\w:-]+)$', r'\1', self.path)
+            logging.debug("in /done_spreading\?last_worm=last_worm:{}".format(last_worm))
+            worm_neighbors.append(last_worm)
+            self.send_whole_response(200, "Worms done spreading\n")
+            return
 
-    #         self.send_whole_response(200, "Worm segment uploaded and started\n")
-    #         return
+        elif path_path == "/kill":
 
-    #     elif path_path == "/kill_worms":
-    #         global shotdown_flag
+            jsonresp = {
+                    "msg": "worm {} killed".format(worm_host),
+                    "exitcodes": exitcodes,
+                    }
+            self.send_whole_response(200, jsonresp)
+            sys.exit()
+            return
 
-    #         wormgatecore.remove_finished()
-    #         exitcodes = wormgatecore.cleanup_all()
-
-    #         jsonresp = {
-    #                 "msg": "Child processes killed",
-    #                 "exitcodes": exitcodes,
-    #                 }
-    #         self.send_whole_response(200, jsonresp)
-    #         return
-
-    #     else:
-    #         self.send_whole_response(404, "Unknown path: " + self.path)
+        else:
+            self.send_whole_response(404, "Unknown path: " + self.path)
 
     def do_GET(self):
         if self.path == "/info":
@@ -294,6 +283,11 @@ def run_http_server(args):
     server_thread.daemon = True
     server_thread.start()
 
+    # # Start stabilizer
+    # stabilization_thread = threading.Thread(target=stabilization) #####
+    # stabilization_thread.daemon = True #####
+    # stabilization_thread.start() #####
+
     def shutdown_server_with_grace_period(thread):
         logger.info("Asking worm to shut down.")
         server.shutdown()
@@ -310,6 +304,20 @@ def run_http_server(args):
             sigdesc = str(signum)
         logger.info("Got system signal %s.", sigdesc)
         shutdown_server_with_grace_period(server_thread)
+    
+    def stabilization(): 
+        global stop_requested
+        global successor
+        global predecessor
+        global other_neighbors
+
+        stop_requested = False #####
+        while not stop_requested:
+            logging.info("Start spreading") ##
+            start_spread(args)
+            logging.info("After spreading") ##
+
+            time.sleep(2) #
 
     # Install signal handlers
     signal.signal(signal.SIGTERM, shutdown_server_on_signal)
@@ -317,17 +325,23 @@ def run_http_server(args):
 
     # Run until given timeout
     server_thread.join(args.die_after_seconds)
+    # stabilization_thread.join(args.die_after_seconds)
 
     # Check if server timed out instead of exiting
     if server_thread.is_alive():
         logger.warn("Reached %.3f second timeout.", args.die_after_seconds)
         shutdown_server_with_grace_period(server_thread)
+        
+    # if stabilization_thread.is_alive(): #####
+    #     stabilization_thread.join() 
 
 if __name__ == '__main__':
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    start_spread(args)
-
-    run_http_server(args)
+    if args.target_size <= 0:
+        print("Target size is 0, no worm is spawned ")
+    else:
+        start_spread(args)
+        run_http_server(args)
 
