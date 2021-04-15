@@ -47,28 +47,27 @@ PORT=$(( ( RANDOM % (65535-49152) ) + 49152 ))
 #Create the first worm
 curl -X POST 'http://'"${GATES[0]}"'/worm_entrance?args=-gp&args='"${GATES_PORT[0]}"'&args=-ts&args='"$1"'&args=-p&args='"$PORT"''   --data-binary @../python_zip_example/worm.bin
 
-
-NUM_SEGMENTS=0
-
 #Start the timer
 start=$(date +%s)
 echo "start: $start"
 
 #Keep checking the number of worm segments in each gate and sum them up
 #Break the loop if the total worm segments is bigger than the target size
+NUM_SEGMENTS=0
 while [ $NUM_SEGMENTS -lt $1 ]
-do
-  for k in "${!GATES[@]}"; do
-    POLL_URL='http://'"${GATES[k]}"'/info'
-    response=$(curl -s -w "%{http_code}" $POLL_URL)
-    content=$(sed '$ d' <<< "$response") 
-    echo "content:$content"
-    numsegments=$(curl -s $POLL_URL | python3 -c "import sys, json; print(json.load(sys.stdin)['numsegments'])")
-    echo "numsegments: $numsegments"
-    NUM_SEGMENTS=$((NUM_SEGMENTS + numsegments))
-  done 
-  echo "NUM_SEGMENTS: $NUM_SEGMENTS"
-done
+  do
+    NUM_SEGMENTS=0
+    for k in "${!GATES[@]}"; do
+      POLL_URL='http://'"${GATES[k]}"'/info'
+      response=$(curl -s -w "%{http_code}" $POLL_URL)
+      content=$(sed '$ d' <<< "$response") 
+      echo "content:$content"
+      numsegments=$(curl -s $POLL_URL | python3 -c "import sys, json; print(json.load(sys.stdin)['numsegments'])")
+      echo "numsegments: $numsegments"
+      NUM_SEGMENTS=$((NUM_SEGMENTS + numsegments))
+    done 
+    echo "NUM_SEGMENTS: $NUM_SEGMENTS"
+  done
 
 #Stop the timer
 end=$(date +%s)
