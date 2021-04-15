@@ -50,7 +50,7 @@ while [ $i -lt $2 ]
   done
 
 #Start the timer
-start=$(date +%s)
+start=$(date +%s%N)
 echo "start: $start"
 
 #Keep checking the number of worm segments in each gate and sum them up
@@ -72,8 +72,9 @@ while [ $NUM_SEGMENTS -lt $1 ]
   done
 
 #Stop the timer
-end=$(date +%s)
+end=$(date +%s%N)
 echo "end: $end"
 #Calculate the time used
 seconds=$(echo "$end - $start" | bc)
-echo $seconds' sec'
+echo $seconds' nano sec'
+echo "It took $((($end - $start)/1000000)) ms" 

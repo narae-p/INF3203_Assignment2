@@ -48,7 +48,7 @@ PORT=$(( ( RANDOM % (65535-49152) ) + 49152 ))
 curl -X POST 'http://'"${GATES[0]}"'/worm_entrance?args=-gp&args='"${GATES_PORT[0]}"'&args=-ts&args='"$1"'&args=-p&args='"$PORT"''   --data-binary @../python_zip_example/worm.bin
 
 #Start the timer
-start=$(date +%s)
+start=$(date +%s%N)
 echo "start: $start"
 
 #Keep checking the number of worm segments in each gate and sum them up
@@ -70,9 +70,10 @@ while [ $NUM_SEGMENTS -lt $1 ]
   done
 
 #Stop the timer
-end=$(date +%s)
+end=$(date +%s%N)
 echo "end: $end"
 #Calculate the time used
 seconds=$(echo "$end - $start" | bc)
-echo $seconds' sec'
+echo $seconds' nano sec'
+echo "It took $((($end - $start)/1000000)) ms" 
 # echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
