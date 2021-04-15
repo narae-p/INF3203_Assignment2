@@ -195,7 +195,7 @@ def start_spread(args):
                 worms[i] = worm_list[i]
             worms[worm_position] = worm_host
         else:
-            old_worm = worm_all[worm_position]
+            old_worm = worm_list[worm_position]
             worm_all = worm_all.replace(old_worm, worm_host)
             worms = worm_all.split(",")
 
@@ -218,15 +218,14 @@ def start_stabilization(args):
 
     gate_host = hostname + ":" + str(gate_port)
     worm_host = hostname + ":" + str(port)
-    # target_size = args.target_size
+    target_size = args.target_size
 
     next_worm_index = worm_position + 1 if worm_position != (len(worms) - 1) else 0
     url = 'http://{}/info'.format(worms[next_worm_index])
-    response = urlopen(url)
-    print("response.getcode() {} on {}".format(response.getcode(), worm_host))
-    if response.getcode() != 200:
-        print("response.getcode() {} on {}".format(response.getcode(), worm_host))
-
+    
+    try:
+        response = urlopen(url)
+    except: 
         gate_neighbors = get_neighbors(gate_host)
         target_neighbor = worm_host
         target_worm_port = port
@@ -235,6 +234,7 @@ def start_stabilization(args):
             target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
             target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
 
+        worm_all = ",".join(worms)
         spread_worm_segment(target_neighbor, target_size, target_worm_port, next_worm_index, worm_all)
         # worm_all = worm_host if worm_all == "" else worm_all + "," + worm_host
         # worms = worm_all.split(",")
@@ -333,7 +333,7 @@ def run_http_server(args):
         # global predecessor
         # global other_neighbors
 
-        time.sleep(2) #
+        time.sleep(5) #
 
         stop_requested = False #####
         while not stop_requested:
@@ -341,7 +341,7 @@ def run_http_server(args):
             start_stabilization(args)
             logging.info("After stabilization on port {} & worms: {}".format(args.port,worms)) ##
 
-            time.sleep(2) #
+            time.sleep(5) #
 
     # Start HTTP server in a separate thread for proper shutdown
     #
