@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 import urllib.parse
-from random import choice
+from random import choice, randint
 from threading import Event, Thread
 from urllib.request import urlopen, urlretrieve, Request
 from urllib.parse import urlencode
@@ -179,8 +179,8 @@ def start_spread(args):
     target_neighbor = worm_host
     target_worm_port = port
     if len(gate_neighbors) > 0:
-        target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
-        target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
+        # target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
+        target_neighbor = gate_neighbors[randint(0, len(gate_neighbors)-1)]
         target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
 
     worms = [""] * target_size
@@ -236,8 +236,9 @@ def start_stabilization(args):
         target_neighbor = worm_host
         target_worm_port = port
         if len(gate_neighbors) > 0:
-            target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
-            target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
+            # target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
+            # target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
+            target_neighbor = gate_neighbors[randint(0, len(gate_neighbors)-1)]
             target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
 
         worm_all = ",".join(worms)
@@ -334,12 +335,7 @@ def run_http_server(args):
         logger.info("Worm has shut down cleanly.")
     
     def stabilization(): 
-        # global stop_requested
-        # global successor
-        # global predecessor
-        # global other_neighbors
-
-        time.sleep(5) #
+        time.sleep(1) #
 
         stop_requested = False #####
         while not stop_requested:
@@ -347,7 +343,7 @@ def run_http_server(args):
             start_stabilization(args)
             logging.info("After stabilization on port {} & worms: {}".format(args.port,worms)) ##
 
-            time.sleep(5) #
+            time.sleep(1) #
 
     # Start HTTP server in a separate thread for proper shutdown
     #
