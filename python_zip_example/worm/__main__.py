@@ -201,10 +201,16 @@ def start_spread(args):
 
     next_worm_position = worm_position + 1 if worm_position < len(worms) - 1 else 0
     if worms[next_worm_position] == "":
-        spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_position + 1, worm_all)
+        try:
+            spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_position + 1, worm_all)
+        except:
+            print("error in start_spread spread_worm_segment")
     for w in worms:
         if (w != worm_host and w != ""):
-            post_finish_spreading(w, worm_host, worm_position)
+            try:
+                post_finish_spreading(w, worm_host, worm_position)
+            except:
+                print("error in start_spread post_finish_spreading")
 
 def start_stabilization(args):
     global worm_host
