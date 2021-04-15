@@ -34,17 +34,15 @@ while read -r NODE
     ((LINE++))
 done < "./wormgates"
 
-for j in "${!GATES[@]}"; do
-  echo "${GATES[j]}"
-  echo "${GATES_PORT[j]}"
-done 
-
-
+# for j in "${!GATES[@]}"; do
+#   echo "${GATES[j]}"
+#   echo "${GATES_PORT[j]}"
+# done 
 
 
 #Kill the worms segments
 i=0
-while [ $i -lt $(($2 - 1)) ]
+while [ $i -lt $2 ]
   do
     curl -X POST 'http://'"${GATES[i]}"'/kill_worms'
     echo 'http://'"${GATES[i]}"'/kill_worms'
@@ -65,12 +63,12 @@ while [ $NUM_SEGMENTS -lt $1 ]
       POLL_URL='http://'"${GATES[k]}"'/info'
       response=$(curl -s -w "%{http_code}" $POLL_URL)
       content=$(sed '$ d' <<< "$response") 
-      echo "content:$content"
+      # echo "content:$content"
       numsegments=$(curl -s $POLL_URL | python3 -c "import sys, json; print(json.load(sys.stdin)['numsegments'])")
-      echo "numsegments: $numsegments"
+      # echo "numsegments: $numsegments"
       NUM_SEGMENTS=$((NUM_SEGMENTS + numsegments))
     done 
-    echo "NUM_SEGMENTS: $NUM_SEGMENTS"
+    # echo "NUM_SEGMENTS: $NUM_SEGMENTS"
   done
 
 #Stop the timer
