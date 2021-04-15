@@ -1,1 +1,0 @@
-This string comes from a resource file.
