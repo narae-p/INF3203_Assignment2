@@ -24,33 +24,6 @@ from urllib.error import URLError
 worm_host = None
 worms = []
 
-class RepeatedTimer:
-
-    """Repeat `function` every `interval` seconds."""
-
-    def __init__(self, interval, function, *args, **kwargs):
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.start = time.time()
-        self.event = Event()
-        self.thread = Thread(target=self._target)
-        self.thread.start()
-
-    def _target(self):
-        while not self.event.wait(self._time):
-            self.function(*self.args, **self.kwargs)
-
-    @property
-    def _time(self):
-        return self.interval - ((time.time() - self.start) % self.interval)
-
-    def stop(self):
-        self.event.set()
-        self.thread.join()
-
-
 # Command-Line Argument Parsing
 #=================================================================
 
@@ -92,6 +65,7 @@ def build_arg_parser():
 
 logger = logging.getLogger("worm")
 
+#Get the worm gate neighbors
 def get_neighbors(host):
     url = 'http://{}/info'.format(host)
     response = urlopen(url)
@@ -100,48 +74,15 @@ def get_neighbors(host):
     other_gates = json_obj['other_gates']
     return other_gates
 
-def get_worm_all(host):
-    url = 'http://{}/info'.format(host)
-    response = urlopen(url)
-    string = response.read().decode('utf-8')
-    json_obj = json.loads(string)
-    worm_all = json_obj['worm_all']
-    return worm_all
-
+#Update a target worm segment with infomation about the source worm segment
 def post_finish_spreading(host, new_worm, worm_position):
     url = 'http://{}/done_spreading?new_worm={}&worm_position={}'.format(host, new_worm, worm_position)
     req = Request(url, method="POST")
     response = urlopen(req)
     return response
 
-class RepeatedTimer:
-
-    """Repeat `function` every `interval` seconds."""
-
-    def __init__(self, interval, function, *args, **kwargs):
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.start = time.time()
-        self.event = Event()
-        self.thread = Thread(target=self._target)
-        self.thread.start()
-
-    def _target(self):
-        while not self.event.wait(self._time):
-            self.function(*self.args, **self.kwargs)
-
-    @property
-    def _time(self):
-        return self.interval - ((time.time() - self.start) % self.interval)
-
-    def stop(self):
-        self.event.set()
-        self.thread.join()
-
+#Send the POST /worm_entrance to spawn a new worm segment 
 def spread_worm_segment(target_gate_host, target_size, target_worm_port, worm_position=0, worm_all=""):
-    # global worm_all
     path = os.path.dirname(os.path.realpath(__file__))
     file = open(path, "rb")
     byte = file.read(1)
@@ -158,9 +99,9 @@ def spread_worm_segment(target_gate_host, target_size, target_worm_port, worm_po
 
     req = Request(url, data)
     response = urlopen(req)
-    # worm_all.append('{}:{}'.format(hostname, target_worm_port))
 
-
+#Prepare the arugments for the POST /worm_entrance to spawn a new worm segment 
+#Maintain the state - the "worms" list 
 def start_spread(args):
     global worm_host
     global worms
@@ -178,17 +119,24 @@ def start_spread(args):
     gate_neighbors = get_neighbors(gate_host)
     target_neighbor = worm_host
     target_worm_port = port
+
+    #Pick an worm gate neighbor
+    #And generate the port the new worm segment
     if len(gate_neighbors) > 0:
-        # target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
         target_neighbor = gate_neighbors[randint(0, len(gate_neighbors)-1)]
         target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
 
+    #Initialize the "worms" list with size of target size
     worms = [""] * target_size
+
+    #Update the "worms" list and generate the "worm_all"
+    #If it is the first worm in the initialization phrase
     if worm_all == "":
         worm_all = worm_host
         worms[worm_position] = worm_host
     else:
         worm_list = worm_all.split(",")
+        #Other worms in the initialization phrase
         if len(worms) > len(worm_list):
             worm_all = worm_all + "," + worm_host
             for i, w in enumerate(worm_list):
@@ -199,12 +147,16 @@ def start_spread(args):
             worm_all = worm_all.replace(old_worm, worm_host)
             worms = worm_all.split(",")
 
+    #Generate the position of the next worm segment
     next_worm_position = worm_position + 1 if worm_position < len(worms) - 1 else 0
+
+    #Spawn next worm segment in initialization phrase
     if worms[next_worm_position] == "":
         try:
             spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_position + 1, worm_all)
         except:
             print("error in start_spread spread_worm_segment")
+    #Send update to other worm segments
     for w in worms:
         if (w != worm_host and w != ""):
             try:
@@ -212,6 +164,8 @@ def start_spread(args):
             except:
                 print("error in start_spread post_finish_spreading")
 
+#Recover to the target size when any of the worm segments are killed
+#Only check the next worm segment
 def start_stabilization(args):
     global worm_host
     global worms
@@ -236,20 +190,11 @@ def start_stabilization(args):
         target_neighbor = worm_host
         target_worm_port = port
         if len(gate_neighbors) > 0:
-            # target_neighbor_list = list(filter((lambda neighbor_host: neighbor_host > gate_host), gate_neighbors))
-            # target_neighbor = gate_neighbors[0] if len(target_neighbor_list) <= 0 else target_neighbor_list[0]
             target_neighbor = gate_neighbors[randint(0, len(gate_neighbors)-1)]
             target_worm_port = choice([i for i in range(49152, 65535) if i not in [target_neighbor.split(":")[1]]])
 
         worm_all = ",".join(worms)
         spread_worm_segment(target_neighbor, target_size, target_worm_port, next_worm_index, worm_all)
-        # worm_all = worm_host if worm_all == "" else worm_all + "," + worm_host
-        # worms = worm_all.split(",")
-        # if len(worms) < target_size:
-        #     spread_worm_segment(target_neighbor, target_size, target_worm_port, worm_host, worm_all)
-        # else:
-        #     for w in worms[:len(worms) - 1]:
-        #         post_finish_spreading(w, worm_all)
 
 # HTTP Request Handler
 #=================================================================
@@ -287,7 +232,6 @@ class HttpRequestHandler(http.server.BaseHTTPRequestHandler):
             new_worm_args = qs["new_worm"] if "new_worm" in qs else []
             worm_position = int(worm_position_args[0])
             new_worm = new_worm_args[0]
-            # worms = worm_all.split(",")
             worms[worm_position] = new_worm
             self.send_whole_response(200, "Worms done spreading worms:{},worm_position:{},new_worm:{} \n ".format(worms, worm_position, new_worm))
             return
@@ -296,10 +240,8 @@ class HttpRequestHandler(http.server.BaseHTTPRequestHandler):
 
             jsonresp = {
                     "msg": "worm {} killed".format(worm_host),
-                    # "exitcodes": exitcodes,
                     }
             self.send_whole_response(200, jsonresp)
-            sys.exit()
             return
 
         else:
@@ -308,7 +250,6 @@ class HttpRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         global worms
         if self.path == "/info":
-            # wormgatecore.remove_finished()
             jsonresp = {
                     "msg": "Worm running",
                     "servername": worm_host,
@@ -331,6 +272,7 @@ def run_http_server(args):
 
     def run_server():
         logger.info("Starting worm on port %d." , args.port)
+        server.running = True
         server.serve_forever()
         logger.info("Worm has shut down cleanly.")
     
